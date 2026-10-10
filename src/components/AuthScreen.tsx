@@ -21,6 +21,8 @@ import {
   Flame,
   Heart,
   Play,
+  Ghost,
+  KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
@@ -82,8 +84,10 @@ export const AuthScreen: React.FC = () => {
   const [emailStatus, setEmailStatus] = useState<EmailValidationResult | null>(null);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
 
-  // OTP Verification state
-  const [authStep, setAuthStep] = useState<"form" | "otp">("form");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // OTP & Reset Password states
+  const [authStep, setAuthStep] = useState<"form" | "otp" | "forgot-password" | "reset-password">("form");
   const [otpEmail, setOtpEmail] = useState("");
   const [pendingUserId, setPendingUserId] = useState<string>("");
   const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
@@ -93,6 +97,17 @@ export const AuthScreen: React.FC = () => {
   const [otpSessionToken, setOtpSessionToken] = useState<string>("");
   const [deliveryInfo, setDeliveryInfo] = useState<{ isLiveDelivered: boolean; message: string } | null>(null);
   const otpInputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
+
+  // Forgot & Reset Password states
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSessionToken, setResetSessionToken] = useState<string>("");
 
   // Active showcase slide
   const [activeSlide, setActiveSlide] = useState(0);
@@ -277,6 +292,115 @@ export const AuthScreen: React.FC = () => {
     }
   };
 
+  const handleGuestLogin = async () => {
+    sound.playPop(500);
+    const guestNumber = Math.floor(1000 + Math.random() * 9000);
+    const guestHandle = `@guest_${guestNumber}`;
+    await quickLogin(guestHandle, "Guest Explorer", "Browsing Thinksy");
+    showToast("Welcome to Thinksy! Browsing as Guest 🕶️", "success");
+  };
+
+  const handleOpenForgotPassword = () => {
+    sound.playPop(440);
+    const prefill = loginIdentifier.trim() || signupEmail.trim();
+    setResetEmail(prefill);
+    setResetCode("");
+    setResetNewPassword("");
+    setResetConfirmPassword("");
+    setResetError(null);
+    setAuthStep("forgot-password");
+  };
+
+  const handleSendResetCode = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const emailToReset = resetEmail.trim().toLowerCase();
+    if (!emailToReset || !emailToReset.includes("@") || !emailToReset.includes(".")) {
+      showToast("Please enter a valid email address.", "info");
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setResetError(null);
+    try {
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailToReset, userId: emailToReset }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        sound.playPop(260);
+        setResetError(data.reason || "Failed to send reset code.");
+        showToast(`❌ ${data.reason || "Failed to send reset code."}`, "error");
+        return;
+      }
+
+      if (data.sessionToken) setResetSessionToken(data.sessionToken);
+      sound.playPop(520);
+      showToast(`📬 Password reset code sent to ${emailToReset}!`, "success");
+      setAuthStep("reset-password");
+    } catch (err: any) {
+      setResetError("Network error sending reset code.");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = resetCode.trim().replace(/\D/g, "");
+    if (cleanCode.length !== 6) {
+      setResetError("Please enter the 6-digit code sent to your email.");
+      return;
+    }
+
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      setResetError("New password must be at least 6 characters long.");
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setResetError(null);
+    try {
+      const res = await fetch("/api/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: resetEmail.trim().toLowerCase(),
+          code: cleanCode,
+          newPassword: resetNewPassword,
+          sessionToken: resetSessionToken,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        sound.playPop(260);
+        setResetError(data.reason || "Failed to reset password.");
+        showToast(`❌ ${data.reason || "Failed to reset password."}`, "error");
+        return;
+      }
+
+      try {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      } catch {}
+      sound.playChime();
+      showToast("Password updated successfully! Welcome! 🎉", "success");
+
+      markEmailVerified();
+      await login(resetEmail.trim().toLowerCase(), resetNewPassword);
+    } catch (err: any) {
+      setResetError("Network error resetting password.");
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = loginIdentifier.trim().toLowerCase();
@@ -286,10 +410,27 @@ export const AuthScreen: React.FC = () => {
     }
 
     if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
-      showToast("Please enter a valid email address to receive your 6-digit login code.", "info");
+      showToast("Please enter a valid email address to log in.", "info");
       return;
     }
 
+    // Direct login if password is provided
+    if (loginPassword.trim()) {
+      setIsSubmitting(true);
+      try {
+        await login(cleanEmail, loginPassword.trim());
+        markEmailVerified();
+        showToast(`Welcome back! 🚀`, "success");
+        return;
+      } catch (err: any) {
+        showToast(err.message || "Login failed.", "error");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    // Otherwise, dispatch 6-digit email OTP
     setIsVerifyingEmail(true);
     const realityCheck = await verifyEmailReality(cleanEmail);
     setIsVerifyingEmail(false);
@@ -722,6 +863,210 @@ export const AuthScreen: React.FC = () => {
                     )}
                   </div>
                 </div>
+              ) : authStep === "forgot-password" ? (
+                /* Forgot Password - Step 1: Request Reset Code */
+                <div className="space-y-4">
+                  <div className="text-center pb-1">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 via-pink-500 to-indigo-600 mx-auto flex items-center justify-center text-white shadow-lg shadow-pink-500/25 mb-3">
+                      <KeyRound className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight">Forgot Password?</h3>
+                    <p className={`text-xs mt-1 max-w-xs mx-auto ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                      Enter your registered email address to receive a 6-digit password reset code.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSendResetCode} className="space-y-3.5">
+                    <div>
+                      <label className={`block text-xs font-semibold mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                        Your Email Address
+                      </label>
+                      <div className="relative flex items-center">
+                        <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type="email"
+                          value={resetEmail}
+                          onChange={(e) => setResetEmail(e.target.value)}
+                          placeholder="yourname@gmail.com"
+                          required
+                          className={`w-full pl-10 pr-4 py-3 rounded-2xl text-xs sm:text-sm font-mono outline-none transition ${
+                            isLight
+                              ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20"
+                              : "bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {resetError && (
+                      <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold text-center flex items-center justify-center gap-1.5">
+                        <span>❌</span>
+                        <span>{resetError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSendingOtp || !resetEmail.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition active:scale-98 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      <span>{isSendingOtp ? "Sending Reset Code..." : "Send Reset Code"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sound.playPop(420);
+                          setAuthStep("form");
+                        }}
+                        className={`text-xs font-medium hover:underline transition ${
+                          isLight ? "text-slate-600 hover:text-slate-900" : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        ← Back to Log In
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : authStep === "reset-password" ? (
+                /* Reset Password - Step 2: Enter Code + New Password */
+                <div className="space-y-4">
+                  <div className="text-center pb-1">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 via-indigo-500 to-pink-500 mx-auto flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 mb-3">
+                      <Lock className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-xl font-black tracking-tight">Set New Password</h3>
+                    <p className={`text-xs mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                      Enter the 6-digit code sent to <strong className="text-indigo-400">{resetEmail}</strong> and your new password.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5">
+                    {/* 6-Digit Code */}
+                    <div>
+                      <label className={`block text-xs font-semibold mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                        6-Digit Reset Code
+                      </label>
+                      <div className="relative flex items-center">
+                        <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={resetCode}
+                          onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="e.g. 508020"
+                          required
+                          className={`w-full pl-10 pr-4 py-3 rounded-2xl text-base font-mono font-bold tracking-widest text-center outline-none transition ${
+                            isLight
+                              ? "bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:border-indigo-600"
+                              : "bg-slate-950 border border-slate-800 text-white focus:border-indigo-500"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* New Password */}
+                    <div>
+                      <label className={`block text-xs font-semibold mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                        New Password
+                      </label>
+                      <div className="relative flex items-center">
+                        <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type={showResetNewPassword ? "text" : "password"}
+                          value={resetNewPassword}
+                          onChange={(e) => setResetNewPassword(e.target.value)}
+                          placeholder="At least 6 characters"
+                          required
+                          minLength={6}
+                          className={`w-full pl-10 pr-10 py-3 rounded-2xl text-xs sm:text-sm outline-none transition ${
+                            isLight
+                              ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-600"
+                              : "bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                          className="absolute right-3.5 text-slate-400 hover:text-slate-200 transition"
+                        >
+                          {showResetNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div>
+                      <label className={`block text-xs font-semibold mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                        Confirm New Password
+                      </label>
+                      <div className="relative flex items-center">
+                        <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type={showResetConfirmPassword ? "text" : "password"}
+                          value={resetConfirmPassword}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          placeholder="Re-enter new password"
+                          required
+                          minLength={6}
+                          className={`w-full pl-10 pr-10 py-3 rounded-2xl text-xs sm:text-sm outline-none transition ${
+                            isLight
+                              ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-600"
+                              : "bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                          className="absolute right-3.5 text-slate-400 hover:text-slate-200 transition"
+                        >
+                          {showResetConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {resetError && (
+                      <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold text-center flex items-center justify-center gap-1.5">
+                        <span>❌</span>
+                        <span>{resetError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isResettingPassword || resetCode.length !== 6 || resetNewPassword.length < 6}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-indigo-600 to-purple-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition active:scale-98 disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      <span>{isResettingPassword ? "Updating Password..." : "Reset Password & Enter Thinksy"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sound.playPop(420);
+                          setAuthStep("form");
+                        }}
+                        className={`transition text-xs ${isLight ? "text-slate-500 hover:text-slate-800" : "text-slate-400 hover:text-white"}`}
+                      >
+                        ← Back to Log In
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSendResetCode}
+                        disabled={isSendingOtp}
+                        className="text-indigo-400 hover:text-pink-400 font-bold transition text-xs"
+                      >
+                        {isSendingOtp ? "Sending..." : "Resend Code"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               ) : (
                 /* Standard Auth Form */
                 <>
@@ -996,10 +1341,31 @@ export const AuthScreen: React.FC = () => {
                         </span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
+
+                      {/* Continue as Guest Button */}
+                      <div className="flex items-center gap-3 my-2 pt-1">
+                        <div className={`flex-1 h-px ${isLight ? "bg-slate-200" : "bg-slate-800"}`} />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? "text-slate-400" : "text-slate-500"}`}>
+                          or explore without email
+                        </span>
+                        <div className={`flex-1 h-px ${isLight ? "bg-slate-200" : "bg-slate-800"}`} />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGuestLogin}
+                        className={`w-full py-2.5 px-4 rounded-2xl border text-xs font-bold transition flex items-center justify-center gap-2 active:scale-98 ${
+                          isLight
+                            ? "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 shadow-sm"
+                            : "bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300"
+                        }`}
+                      >
+                        <Ghost className="w-4 h-4 text-purple-400" />
+                        <span>Continue as Guest / Browse as Guest 🕶️</span>
+                      </button>
                     </form>
                   )}
 
-                  {/* TAB: LOG IN */}
                   {/* TAB: LOG IN */}
                   {activeTab === "login" && (
                     <form onSubmit={handleLoginSubmit} className="space-y-3.5">
@@ -1066,6 +1432,42 @@ export const AuthScreen: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Password Input with Forgot Password Link */}
+                      <div className="space-y-1.5">
+                        <div className="relative flex items-center">
+                          <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <input
+                            type={showLoginPassword ? "text" : "password"}
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            placeholder="Password (or leave blank to use email code)"
+                            className={`w-full pl-10 pr-10 py-3 rounded-2xl text-xs sm:text-sm outline-none transition ${
+                              isLight
+                                ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20"
+                                : "bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowLoginPassword(!showLoginPassword)}
+                            className="absolute right-3.5 text-slate-400 hover:text-slate-200 transition"
+                          >
+                            {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-end px-1">
+                          <button
+                            type="button"
+                            onClick={handleOpenForgotPassword}
+                            className="text-[11px] font-semibold text-indigo-400 hover:text-pink-400 hover:underline transition"
+                          >
+                            Forgot password?
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Log In Action Button */}
                       <button
                         type="submit"
                         disabled={isSubmitting || isSendingOtp || !loginIdentifier.trim()}
@@ -1075,10 +1477,34 @@ export const AuthScreen: React.FC = () => {
                           {isSendingOtp
                             ? "Sending Verification Code..."
                             : isSubmitting
-                            ? "Checking..."
+                            ? "Logging in..."
+                            : loginPassword.trim()
+                            ? "Log In with Password"
                             : "Send 6-Digit Code & Log In"}
                         </span>
                         <ArrowRight className="w-4 h-4" />
+                      </button>
+
+                      {/* Continue as Guest Button */}
+                      <div className="flex items-center gap-3 my-2 pt-1">
+                        <div className={`flex-1 h-px ${isLight ? "bg-slate-200" : "bg-slate-800"}`} />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? "text-slate-400" : "text-slate-500"}`}>
+                          or explore without email
+                        </span>
+                        <div className={`flex-1 h-px ${isLight ? "bg-slate-200" : "bg-slate-800"}`} />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGuestLogin}
+                        className={`w-full py-2.5 px-4 rounded-2xl border text-xs font-bold transition flex items-center justify-center gap-2 active:scale-98 ${
+                          isLight
+                            ? "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 shadow-sm"
+                            : "bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300"
+                        }`}
+                      >
+                        <Ghost className="w-4 h-4 text-purple-400" />
+                        <span>Continue as Guest / Browse as Guest 🕶️</span>
                       </button>
                     </form>
                   )}
