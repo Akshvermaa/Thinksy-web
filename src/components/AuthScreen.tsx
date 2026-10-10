@@ -207,6 +207,16 @@ export const AuthScreen: React.FC = () => {
       return;
     }
 
+    const cleanHandle = signupHandle.trim().replace(/^@/, "").toLowerCase();
+    const existingHandle = savedAccounts.find(
+      (a) => a.handle.replace(/^@/, "").toLowerCase() === cleanHandle
+    );
+    if (existingHandle) {
+      sound.playPop(260);
+      showToast("This creator handle is already taken. Please pick another one or log in.", "info");
+      return;
+    }
+
     const emailToVerify = signupEmail.trim();
     if (emailToVerify) {
       // Check if email already registered in local accounts

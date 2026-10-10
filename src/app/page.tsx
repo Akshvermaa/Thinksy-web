@@ -48,6 +48,23 @@ export default function HomePage() {
     isCommunityOpen;
   useScrollLock(isAnyModalOpen);
 
+  // 1. Loading screen while session restores
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0c091d] text-white">
+        <div className="w-12 h-12 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-4" />
+        <p className="font-bold text-sm tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+          Thinksy 💭 Loading your vibe...
+        </p>
+      </div>
+    );
+  }
+
+  // 2. Auth Gate: Must log in or sign up first to enter the app
+  if (!isAuthenticated) {
+    return <AuthScreen />;
+  }
+
   const handleClearSearch = () => {
     setSearchQuery("");
   };
