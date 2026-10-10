@@ -18,7 +18,7 @@ export const InlineComposerBar: React.FC<InlineComposerBarProps> = ({ onOpen }) 
         className={`group relative cursor-pointer flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-3xl transition-all duration-200 ${
           isLight
             ? "bg-white hover:bg-slate-50/90 border border-slate-200 shadow-sm hover:border-indigo-400 hover:shadow-md"
-            : "bg-slate-900/80 hover:bg-slate-900 border border-slate-800/90 hover:border-indigo-500/50 shadow-xl shadow-black/20 hover:shadow-indigo-500/10 backdrop-blur-xl"
+            : "bg-slate-900/90 sm:backdrop-blur-xl border border-slate-800/90 hover:border-indigo-500/50 shadow-lg shadow-black/20"
         }`}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">

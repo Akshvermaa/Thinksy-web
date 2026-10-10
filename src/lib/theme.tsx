@@ -55,7 +55,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, isLight, setTheme, cycleTheme }}>
-      <div className={`theme-${theme} ${isLight ? "light text-slate-900" : "dark text-slate-100"} min-h-screen transition-colors duration-300`}>
+      <div className={`theme-${theme} ${isLight ? "light text-slate-900" : "dark text-slate-100"} min-h-screen relative`}>
+        <div className="theme-bg-canvas" aria-hidden="true" />
         {children}
       </div>
     </ThemeContext.Provider>

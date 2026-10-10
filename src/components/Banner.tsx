@@ -20,7 +20,7 @@ export const Banner: React.FC<BannerProps> = ({ onSwitchToReels, onSwitchToAi, o
         className={`relative overflow-hidden rounded-3xl p-4 sm:p-5 shadow-xl transition-all duration-300 ${
           isLight
             ? "bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-pink-50/80 border border-indigo-100 shadow-sm"
-            : "bg-gradient-to-r from-indigo-950/60 via-slate-900/80 to-purple-950/50 border border-indigo-500/20 backdrop-blur-xl"
+            : "bg-slate-900/90 sm:backdrop-blur-xl border border-indigo-500/20 shadow-black/20"
         }`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3.5">

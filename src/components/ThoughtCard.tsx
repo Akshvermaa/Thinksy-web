@@ -122,11 +122,8 @@ export const ThoughtCard: React.FC<ThoughtCardProps> = ({ thought, isHighlighted
 
   return (
     <>
-      <motion.div
+      <div
         id={`thought-${thought.id}`}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
         className={`group relative w-full mb-4 ${
           isHighlighted ? "ring-2 ring-indigo-400 shadow-2xl shadow-indigo-500/40 scale-[1.02]" : ""
         }`}
@@ -419,7 +416,7 @@ export const ThoughtCard: React.FC<ThoughtCardProps> = ({ thought, isHighlighted
             </div>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* Report Modal */}
       <ReportModal
