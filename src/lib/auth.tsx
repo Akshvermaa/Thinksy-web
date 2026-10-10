@@ -88,7 +88,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = "thoughts_current_user_v2";
+const STORAGE_KEY = "thinksy_session_user_v1";
 const SAVED_ACCOUNTS_KEY = "thoughts_saved_accounts_v2";
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -101,8 +101,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Restore stored session and saved accounts on mount
   useEffect(() => {
     try {
-      // Clear legacy test registries from local storage
+      // Clear all legacy test keys so new visits always see the Login screen first
       [
+        "thoughts_current_user_v1",
+        "thoughts_current_user_v2",
+        "thinksy_user_profile_v1",
+        "thinksy_user_profile_v2",
         "thinksy_genuine_members_registry_v1",
         "thinksy_genuine_members_registry_v2",
         "thinksy_genuine_members_registry_v3",
@@ -120,6 +124,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(parsed);
           registerGenuineMember(parsed);
         }
+      } else if (isFirebaseConfigured() && auth) {
+        // If no active session in storage, clear any background Firebase cached token
+        fbSignOut(auth).catch(() => {});
       }
 
       const storedAccounts = localStorage.getItem(SAVED_ACCOUNTS_KEY);
