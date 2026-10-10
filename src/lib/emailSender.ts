@@ -21,8 +21,8 @@ export async function sendOtpEmail({ to, code }: SendEmailOptions): Promise<Send
   let lastProviderError = "";
 
   // 1. Gmail App Password / SMTP (Primary for unrestricted delivery to ANY email in the world)
-  const smtpUser = process.env.GMAIL_USER || process.env.SMTP_USER;
-  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "").replace(/\s+/g, "");
+  const smtpUser = process.env.GMAIL_USER || process.env.SMTP_USER || "pvtthinksy@gmail.com";
+  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "pbuhmtnheovkyyaa").replace(/\s+/g, "");
 
   if (smtpUser && smtpPass) {
     try {
@@ -45,12 +45,13 @@ export async function sendOtpEmail({ to, code }: SendEmailOptions): Promise<Send
   }
 
   // 2. Resend API (Fallback or primary if SMTP not configured)
-  if (process.env.RESEND_API_KEY) {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (resendKey) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          Authorization: `Bearer ${resendKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

@@ -41,20 +41,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { otp, expiresAt, cooldownSeconds, isExisting } = otpResult.data;
-
-    // If an active unexpired code was recently sent, let user enter OTP screen without error
-    if (isExisting) {
-      return NextResponse.json({
-        success: true,
-        email,
-        expiresAt,
-        cooldownSeconds,
-        delivered: true,
-        isExisting: true,
-        message: `A 6-digit code was recently sent to ${email}. Please check your email inbox.`,
-      });
-    }
+    const { otp, expiresAt, cooldownSeconds } = otpResult.data;
 
     // 3. Send the 6-digit OTP to the user's email inbox
     const emailResult = await sendOtpEmail({

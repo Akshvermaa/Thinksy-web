@@ -131,13 +131,8 @@ export async function createOrRefreshOtp(
   if (existing && Date.now() - existing.lastRequestedAt < COOLDOWN_MS) {
     const remainingSeconds = Math.ceil((COOLDOWN_MS - (Date.now() - existing.lastRequestedAt)) / 1000);
     return {
-      success: true,
-      data: {
-        otp: "",
-        expiresAt: existing.expiresAt,
-        cooldownSeconds: remainingSeconds,
-        isExisting: true,
-      },
+      success: false,
+      error: `Please wait ${remainingSeconds}s before requesting a new code.`,
     };
   }
 
