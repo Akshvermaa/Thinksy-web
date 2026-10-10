@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { otp, expiresAt, cooldownSeconds } = otpResult.data;
+    const { otp, expiresAt, cooldownSeconds, sessionToken } = otpResult.data;
 
     // 3. Send the 6-digit OTP to the user's email inbox
     const emailResult = await sendOtpEmail({
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
       email,
       expiresAt,
       cooldownSeconds,
+      sessionToken,
       delivered: true,
       provider: emailResult.provider,
       message: `A 6-digit verification code has been sent to ${email}.`,

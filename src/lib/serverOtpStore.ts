@@ -21,6 +21,7 @@ export interface GenerateOtpResult {
   otp: string; // ONLY returned to the server-side sender to dispatch; NEVER logged or sent to client!
   expiresAt: number;
   cooldownSeconds: number;
+  sessionToken?: string;
   isExisting?: boolean;
 }
 
@@ -87,6 +88,54 @@ function withTimeout<T>(promise: Promise<T>, ms = 2000): Promise<T> {
  */
 export function hashOtp(otp: string): string {
   return crypto.createHmac("sha256", getHmacSecret()).update(otp.trim()).digest("hex");
+}
+
+/**
+ * Creates a cryptographically signed HMAC verification token for serverless environments
+ */
+export function createSessionToken(email: string, otp: string, expiresAt: number): string {
+  const normalizedEmail = email.trim().toLowerCase();
+  const hash = hashOtp(otp);
+  const payload = `${normalizedEmail}|${expiresAt}|${hash}`;
+  const sig = crypto.createHmac("sha256", getHmacSecret()).update(payload).digest("hex");
+  return `${payload}|${sig}`;
+}
+
+/**
+ * Validates a stateless HMAC session token against user-submitted code
+ */
+export function verifySessionToken(token: string, code: string, email: string): { isValid: boolean; reason?: string } {
+  try {
+    const parts = token.split("|");
+    if (parts.length !== 4) return { isValid: false, reason: "Malformed session token." };
+    const [tokenEmail, expiresAtStr, storedHash, sig] = parts;
+    const expiresAt = Number(expiresAtStr);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (tokenEmail !== normalizedEmail) {
+      return { isValid: false, reason: "Email does not match verification session." };
+    }
+
+    if (Date.now() > expiresAt) {
+      return { isValid: false, reason: "This code has expired. Please request a new OTP." };
+    }
+
+    const payload = `${tokenEmail}|${expiresAtStr}|${storedHash}`;
+    const expectedSig = crypto.createHmac("sha256", getHmacSecret()).update(payload).digest("hex");
+
+    if (!secureCompare(sig, expectedSig)) {
+      return { isValid: false, reason: "Tampered verification token." };
+    }
+
+    const submittedHash = hashOtp(code.trim().replace(/\D/g, ""));
+    if (!secureCompare(storedHash, submittedHash)) {
+      return { isValid: false, reason: "Invalid verification code. Please check the 6 digits sent to your email." };
+    }
+
+    return { isValid: true };
+  } catch (_) {
+    return { isValid: false, reason: "Verification failed." };
+  }
 }
 
 /**
@@ -190,26 +239,30 @@ export async function createOrRefreshOtp(
     } catch (_) {}
   }
 
+  const sessionToken = createSessionToken(normalizedEmail, rawOtp, expiresAt);
+
   return {
     success: true,
     data: {
       otp: rawOtp,
       expiresAt,
       cooldownSeconds: 60,
+      sessionToken,
     },
   };
 }
 
 /**
  * Verify submitted OTP against stored hash, enforcing expiration and attempt count.
- * Accepts either an object { email, userId } or a string (email or userId).
+ * Accepts either an object { email, userId, sessionToken } or a string (email or userId).
  */
 export async function verifyAndConsumeOtp(
-  identifier: string | { email?: string; userId?: string },
+  identifier: string | { email?: string; userId?: string; sessionToken?: string },
   userCode: string
 ): Promise<VerifyOtpResult> {
   let emailKey = "";
   let userKey = "";
+  let sessionToken = "";
 
   if (typeof identifier === "string") {
     if (identifier.includes("@")) {
@@ -220,9 +273,50 @@ export async function verifyAndConsumeOtp(
   } else if (identifier && typeof identifier === "object") {
     if (identifier.email) emailKey = identifier.email.trim().toLowerCase();
     if (identifier.userId) userKey = identifier.userId.trim();
+    if (identifier.sessionToken) sessionToken = identifier.sessionToken.trim();
   }
 
   const cleanCode = userCode.trim().replace(/\D/g, "");
+
+  if (cleanCode.length !== 6) {
+    return {
+      isValid: false,
+      status: "invalid_code",
+      reason: "Invalid verification code. Code must be exactly 6 digits.",
+    };
+  }
+
+  // 0. Primary Fast-path: Stateless Cryptographic Verification (100% resilient across Serverless Lambda containers)
+  if (sessionToken && emailKey) {
+    const tokenCheck = verifySessionToken(sessionToken, cleanCode, emailKey);
+    if (tokenCheck.isValid) {
+      await deleteOtpRecord(emailKey, userKey);
+      // Sync verified status to Firestore
+      const targetUid = userKey || emailKey;
+      if (isFirebaseConfigured() && db) {
+        try {
+          await setDoc(
+            doc(db, "users", targetUid),
+            {
+              uid: targetUid,
+              email: emailKey,
+              emailVerified: true,
+              verifiedAt: Date.now(),
+            },
+            { merge: true }
+          );
+        } catch (_) {}
+      }
+      return { isValid: true, status: "success" };
+    } else if (tokenCheck.reason && !tokenCheck.reason.includes("Invalid")) {
+      // Expired or mismatched token
+      return {
+        isValid: false,
+        status: tokenCheck.reason.includes("expired") ? "expired" : "invalid_code",
+        reason: tokenCheck.reason,
+      };
+    }
+  }
 
   if (cleanCode.length !== 6) {
     return {

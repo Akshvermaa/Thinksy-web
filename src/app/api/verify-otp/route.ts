@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const email = (body.email || "").trim().toLowerCase();
     const userId = (body.userId || email).trim();
     const code = (body.code || "").trim();
+    const sessionToken = (body.sessionToken || "").trim();
 
     if (!code) {
       return NextResponse.json(
@@ -22,8 +23,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify OTP against stored hash (checked against email and userId)
-    const verification = await verifyAndConsumeOtp({ email, userId }, code);
+    // Verify OTP against stored hash & cryptographic sessionToken
+    const verification = await verifyAndConsumeOtp({ email, userId, sessionToken }, code);
 
     if (!verification.isValid) {
       return NextResponse.json(

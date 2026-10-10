@@ -90,6 +90,7 @@ export const AuthScreen: React.FC = () => {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpResendTimer, setOtpResendTimer] = useState<number>(60);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSessionToken, setOtpSessionToken] = useState<string>("");
   const [deliveryInfo, setDeliveryInfo] = useState<{ isLiveDelivered: boolean; message: string } | null>(null);
   const otpInputRefs = React.useRef<(HTMLInputElement | null)[]>([]);
 
@@ -178,6 +179,7 @@ export const AuthScreen: React.FC = () => {
 
       setOtpEmail(emailToSend);
       if (uid) setPendingUserId(uid);
+      if (data.sessionToken) setOtpSessionToken(data.sessionToken);
       setOtpDigits(["", "", "", "", "", ""]);
       setOtpResendTimer(data.cooldownSeconds || 15);
       setDeliveryInfo({
@@ -368,6 +370,7 @@ export const AuthScreen: React.FC = () => {
           email: otpEmail,
           code,
           userId: pendingUserId || otpEmail,
+          sessionToken: otpSessionToken,
         }),
       });
       const data = await res.json();
