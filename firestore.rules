@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    // 1. EMAIL VERIFICATION RECORDS (OTP)
+    // STRICT SECURITY: OTP records contain hashed verification codes.
+    // Clients must NEVER be allowed to read, list, create, or update them.
+    // Only secure server-side API routes can access this collection.
+    // ============================================================
+    match /email_verifications/{verificationId} {
+      allow read, write: if false;
+    }
+
+    // ============================================================
+    // 2. USER PROFILES
+    // Users can read public profile details.
+    // Users can create their own profile during signup.
+    // Users CANNOT directly modify their 'emailVerified' or 'role' fields!
+    // Verification can only be updated by the server API upon valid OTP check.
+    // ============================================================
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null 
+                    && request.auth.uid == userId
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailVerified', 'role']);
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ============================================================
+    // 3. THOUGHTS & COMMUNITY CONTENT
+    // Anyone can read thoughts. Authenticated users can create thoughts.
+    // ============================================================
+    match /thoughts/{thoughtId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.authorId == request.auth.uid;
+    }
+
+    // ============================================================
+    // 4. REELS & VIDEOS
+    // ============================================================
+    match /reels/{reelId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+  }
+}
