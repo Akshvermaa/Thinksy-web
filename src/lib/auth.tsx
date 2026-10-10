@@ -88,8 +88,31 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = "thinksy_session_user_v1";
+const SESSION_KEY = "thinksy_authenticated_session_v1";
 const SAVED_ACCOUNTS_KEY = "thoughts_saved_accounts_v2";
+
+function saveSessionProfile(profile: UserProfile | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (profile) {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+    } else {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+  } catch {}
+}
+
+function getSessionProfile(): UserProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.uid && parsed.handle ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -101,12 +124,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Restore stored session and saved accounts on mount
   useEffect(() => {
     try {
-      // Clear all legacy test keys so new visits always see the Login screen first
+      // Purge all legacy persistent local storage login tokens!
       [
         "thoughts_current_user_v1",
         "thoughts_current_user_v2",
         "thinksy_user_profile_v1",
         "thinksy_user_profile_v2",
+        "thinksy_session_user_v1",
         "thinksy_genuine_members_registry_v1",
         "thinksy_genuine_members_registry_v2",
         "thinksy_genuine_members_registry_v3",
@@ -117,16 +141,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {}
       });
 
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.uid && parsed.handle) {
-          setUser(parsed);
-          registerGenuineMember(parsed);
+      const sessionUser = getSessionProfile();
+      if (sessionUser) {
+        // Tab is actively in an authenticated session
+        setUser(sessionUser);
+        registerGenuineMember(sessionUser);
+      } else {
+        // Fresh visit through the link: strictly start with NO user so the Login Screen opens first!
+        setUser(null);
+        if (isFirebaseConfigured() && auth) {
+          fbSignOut(auth).catch(() => {});
         }
-      } else if (isFirebaseConfigured() && auth) {
-        // If no active session in storage, clear any background Firebase cached token
-        fbSignOut(auth).catch(() => {});
       }
 
       const storedAccounts = localStorage.getItem(SAVED_ACCOUNTS_KEY);
@@ -134,11 +159,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedAccs = JSON.parse(storedAccounts);
         if (Array.isArray(parsedAccs)) {
           setSavedAccounts(parsedAccs);
-          // Never auto-register inactive saved accounts as online community members
         }
       }
     } catch (e) {
-      console.warn("Failed to parse stored user profile", e);
+      console.warn("Failed to initialize auth state", e);
     } finally {
       setIsLoading(false);
     }
@@ -158,12 +182,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Listen to Firebase Auth state if configured
+  // Listen to Firebase Auth state only when an active tab session exists
   useEffect(() => {
     if (!isFirebaseConfigured() || !auth) return;
 
     const unsubscribe = onAuthStateChanged(auth, (fbUser: FirebaseUser | null) => {
-      if (fbUser) {
+      // Never auto-login on initial link open unless actively authenticated in this tab session
+      const currentActiveSession = getSessionProfile();
+      if (fbUser && currentActiveSession) {
         const rawHandle =
           fbUser.email?.split("@")[0] ||
           fbUser.displayName?.toLowerCase().replace(/\s+/g, "_") ||
@@ -180,7 +206,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         setUser(profile);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+        saveSessionProfile(profile);
         saveProfileToAccountsList(profile);
         syncUserToFirestore(profile, { authProvider: fbUser.isAnonymous ? "anonymous" : "firebase_auth" });
       }
@@ -238,9 +264,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setUser(profile);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    saveSessionProfile(profile);
     saveProfileToAccountsList(profile);
     syncUserToFirestore(profile, { lastLoginAt: Date.now() });
+    registerGenuineMember(profile);
     sound.playChime();
     closeLoginModal();
   };
@@ -259,9 +286,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setUser(profile);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    saveSessionProfile(profile);
     saveProfileToAccountsList(profile);
     syncUserToFirestore(profile, { createdAt: Date.now(), lastLoginAt: Date.now() });
+    registerGenuineMember(profile);
     sound.playChime();
     closeLoginModal();
   };
@@ -270,7 +298,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isFirebaseConfigured() && auth) {
       try {
         const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
+        const cred = await signInWithPopup(auth, provider);
+        if (cred.user) {
+          const rawHandle =
+            cred.user.email?.split("@")[0] ||
+            cred.user.displayName?.toLowerCase().replace(/\s+/g, "_") ||
+            `creator_${cred.user.uid.slice(0, 5)}`;
+          const handle = rawHandle.startsWith("@") ? rawHandle : `@${rawHandle}`;
+
+          const profile: UserProfile = {
+            uid: cred.user.uid,
+            displayName: cred.user.displayName || handle.replace("@", ""),
+            handle,
+            email: cred.user.email,
+            photoURL: cred.user.photoURL,
+          };
+          setUser(profile);
+          saveSessionProfile(profile);
+          saveProfileToAccountsList(profile);
+          registerGenuineMember(profile);
+          syncUserToFirestore(profile, { authProvider: "google" });
+        }
         closeLoginModal();
         sound.playChime();
         return;
@@ -288,8 +336,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: "creator@gmail.com",
     };
     setUser(profile);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    saveSessionProfile(profile);
     saveProfileToAccountsList(profile);
+    registerGenuineMember(profile);
     sound.playChime();
     closeLoginModal();
   };
@@ -307,8 +356,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setUser(profile);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    saveSessionProfile(profile);
     saveProfileToAccountsList(profile);
+    registerGenuineMember(profile);
     sound.playChime();
     closeLoginModal();
   };
@@ -349,7 +399,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated: UserProfile = { ...user, emailVerified: true };
     setUser(updated);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      saveSessionProfile(updated);
       saveProfileToAccountsList(updated);
       syncUserToFirestore(updated, { emailVerified: true, verifiedAt: Date.now() });
     } catch (e) {
@@ -370,7 +420,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
+    saveSessionProfile(null);
   };
 
   const updateUserProfile = (data: Partial<UserProfile>) => {
@@ -378,7 +428,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated: UserProfile = { ...user, ...data };
     setUser(updated);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      saveSessionProfile(updated);
       saveProfileToAccountsList(updated);
       syncUserToFirestore(updated, { updatedAt: Date.now() });
     } catch (e) {
@@ -390,8 +440,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sound.playChime();
     setUser(profile);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+      saveSessionProfile(profile);
       saveProfileToAccountsList(profile);
+      registerGenuineMember(profile);
     } catch (e) {
       console.warn("Failed to switch account:", e);
     }
