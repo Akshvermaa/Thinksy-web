@@ -218,110 +218,92 @@ export const AuthScreen: React.FC = () => {
     }
 
     const emailToVerify = signupEmail.trim();
-    if (emailToVerify) {
-      // Check if email already registered in local accounts
-      const existingEmail = savedAccounts.find(
-        (a) => a.email && a.email.toLowerCase() === emailToVerify.toLowerCase()
+    if (!emailToVerify) {
+      sound.playPop(260);
+      showToast("Please enter your email to receive your 6-digit access code.", "info");
+      return;
+    }
+
+    // Check if email already registered in local accounts
+    const existingEmail = savedAccounts.find(
+      (a) => a.email && a.email.toLowerCase() === emailToVerify.toLowerCase()
+    );
+    if (existingEmail) {
+      sound.playPop(260);
+      showToast("This email is already registered. Switched to Log In.", "info");
+      setActiveTab("login");
+      setLoginIdentifier(emailToVerify);
+      return;
+    }
+
+    setIsVerifyingEmail(true);
+    const realityCheck = await verifyEmailReality(emailToVerify);
+    setIsVerifyingEmail(false);
+
+    if (!realityCheck.isValid) {
+      sound.playPop(260);
+      setEmailStatus(realityCheck);
+      showToast(`❌ ${realityCheck.reason}`, "error");
+      return; // STOP LOGIN
+    }
+
+    // Create Firebase Authentication account & Send 6-digit code to real inbox
+    setIsSubmitting(true);
+    let createdUid = "";
+    try {
+      createdUid = await createFirebaseAuthAccount(
+        emailToVerify,
+        signupPassword,
+        signupHandle.replace("@", "")
       );
-      if (existingEmail) {
-        sound.playPop(260);
-        showToast("This email is already registered. Switched to Log In.", "info");
+      setPendingUserId(createdUid);
+
+      // SEND OTP CODE TO PROVE EMAIL REALITY
+      const sent = await sendEmailOtp(emailToVerify, createdUid);
+      if (sent) return; // Wait for OTP verification
+    } catch (err: any) {
+      sound.playPop(260);
+      const errMsg = err?.message || "Failed to create account.";
+      showToast(errMsg, "error");
+      if (errMsg.toLowerCase().includes("already registered")) {
         setActiveTab("login");
         setLoginIdentifier(emailToVerify);
-        return;
       }
-
-      setIsVerifyingEmail(true);
-      const realityCheck = await verifyEmailReality(emailToVerify);
-      setIsVerifyingEmail(false);
-
-      if (!realityCheck.isValid) {
-        sound.playPop(260);
-        setEmailStatus(realityCheck);
-        showToast(`❌ ${realityCheck.reason}`, "error");
-        return; // STOP LOGIN
-      }
-
-      // Requirement 1: When user signs up, create Firebase Authentication account
-      setIsSubmitting(true);
-      let createdUid = "";
-      try {
-        createdUid = await createFirebaseAuthAccount(
-          emailToVerify,
-          signupPassword,
-          signupHandle.replace("@", "")
-        );
-        setPendingUserId(createdUid);
-
-        // SEND OTP CODE TO PROVE EMAIL REALITY
-        const sent = await sendEmailOtp(emailToVerify, createdUid);
-        if (sent) return; // Wait for OTP verification
-      } catch (err: any) {
-        sound.playPop(260);
-        const errMsg = err?.message || "Failed to create account.";
-        showToast(errMsg, "error");
-        if (errMsg.toLowerCase().includes("already registered")) {
-          setActiveTab("login");
-          setLoginIdentifier(emailToVerify);
-        }
-        return;
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      // Direct signup without email
-      setIsSubmitting(true);
-      try {
-        await signup({
-          displayName: signupHandle.replace("@", ""),
-          handle: signupHandle,
-          password: signupPassword,
-        });
-        showToast(`Welcome ${signupHandle}! 🎉`, "success");
-      } catch (err: any) {
-        showToast(err.message || "Failed to create account", "error");
-      } finally {
-        setIsSubmitting(false);
-      }
+      return;
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanId = loginIdentifier.trim();
-    if (!cleanId) {
-      showToast("Please enter your creator handle or email.", "info");
+    const cleanEmail = loginIdentifier.trim().toLowerCase();
+    if (!cleanEmail) {
+      showToast("Please enter your email address to log in.", "info");
       return;
     }
 
-    if (cleanId.includes("@") && !cleanId.startsWith("@")) {
-      setIsVerifyingEmail(true);
-      const realityCheck = await verifyEmailReality(cleanId);
-      setIsVerifyingEmail(false);
+    if (!cleanEmail.includes("@") || !cleanEmail.includes(".")) {
+      showToast("Please enter a valid email address to receive your 6-digit login code.", "info");
+      return;
+    }
 
-      if (!realityCheck.isValid) {
-        sound.playPop(260);
-        setLoginEmailStatus(realityCheck);
-        showToast(`❌ Cannot Log In: ${realityCheck.reason}`, "error");
-        return; // STOP LOGIN
-      }
+    setIsVerifyingEmail(true);
+    const realityCheck = await verifyEmailReality(cleanEmail);
+    setIsVerifyingEmail(false);
 
-      setIsSubmitting(true);
-      try {
-        // Send OTP to verify email reality before logging in
-        const sent = await sendEmailOtp(cleanId, cleanId);
-        if (sent) return;
-      } finally {
-        setIsSubmitting(false);
-      }
+    if (!realityCheck.isValid) {
+      sound.playPop(260);
+      setLoginEmailStatus(realityCheck);
+      showToast(`❌ Cannot Log In: ${realityCheck.reason}`, "error");
+      return; // STOP LOGIN
     }
 
     setIsSubmitting(true);
     try {
-      await login(cleanId, loginPassword);
-      showToast(`Welcome back, ${cleanId}! 🎉`, "success");
-    } catch (err: any) {
-      showToast(err.message || "Failed to log in", "error");
+      // Send OTP to user's real email inbox
+      const sent = await sendEmailOtp(cleanEmail, cleanEmail);
+      if (sent) return;
     } finally {
       setIsSubmitting(false);
     }
@@ -740,6 +722,18 @@ export const AuthScreen: React.FC = () => {
               ) : (
                 /* Standard Auth Form */
                 <>
+                  {/* Dedicated Header for Email Gate */}
+                  <div className="text-center mb-5">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[11px] font-bold mb-2">
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Email Login Required</span>
+                    </div>
+                    <h2 className="text-2xl font-black tracking-tight">Enter Thinksy</h2>
+                    <p className={`text-xs mt-1 max-w-xs mx-auto ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                      Enter your email to receive a 6-digit access code. Only verified members can access the web app.
+                    </p>
+                  </div>
+
                   {/* Clean Segmented Tab Switcher */}
                   <div
                     className={`grid grid-cols-2 p-1 rounded-2xl mb-5 text-xs font-bold transition ${
@@ -1003,15 +997,16 @@ export const AuthScreen: React.FC = () => {
                   )}
 
                   {/* TAB: LOG IN */}
+                  {/* TAB: LOG IN */}
                   {activeTab === "login" && (
                     <form onSubmit={handleLoginSubmit} className="space-y-3.5">
                       <div className="relative flex items-center">
-                        <User className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <Mail className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
                         <input
-                          type="text"
+                          type="email"
                           value={loginIdentifier}
                           onChange={(e) => handleLoginIdentifierChange(e.target.value)}
-                          placeholder="@handle or yourname@gmail.com"
+                          placeholder="yourname@gmail.com"
                           className={`w-full pl-10 pr-4 py-3 rounded-2xl text-xs sm:text-sm font-mono outline-none transition ${
                             loginEmailStatus
                               ? loginEmailStatus.isValid
@@ -1068,28 +1063,6 @@ export const AuthScreen: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="relative flex items-center">
-                        <Lock className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
-                          placeholder="Passcode / Password"
-                          className={`w-full pl-10 pr-10 py-3 rounded-2xl text-xs sm:text-sm outline-none transition ${
-                            isLight
-                              ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20"
-                              : "bg-slate-950 border border-slate-800 text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25"
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3.5 text-slate-400 hover:text-slate-200 transition"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-
                       <button
                         type="submit"
                         disabled={isSubmitting || isSendingOtp || !loginIdentifier.trim()}
@@ -1099,29 +1072,18 @@ export const AuthScreen: React.FC = () => {
                           {isSendingOtp
                             ? "Sending Verification Code..."
                             : isSubmitting
-                            ? "Logging In..."
-                            : loginIdentifier.includes("@")
-                            ? "Verify & Log In"
-                            : "Log In to Thinksy"}
+                            ? "Checking..."
+                            : "Send 6-Digit Code & Log In"}
                         </span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </form>
                   )}
 
-                  {/* Clean Discreet Guest Pass at bottom */}
-                  <div className="mt-5 pt-4 border-t border-inherit/40 flex items-center justify-between text-xs">
-                    <span className={isLight ? "text-slate-500" : "text-slate-400"}>
-                      Just want to look around?
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGuestPass}
-                      className="font-bold text-indigo-400 hover:text-pink-400 transition flex items-center gap-1 active:scale-95"
-                    >
-                      <span>Quick Guest Pass</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Mandatory Email Access Notice */}
+                  <div className="mt-5 pt-4 border-t border-inherit/40 flex items-center justify-center gap-1.5 text-xs text-slate-500">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Email verification required to access Thinksy. No bots or burner accounts.</span>
                   </div>
                 </>
               )}
