@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: "Thinksy — Relatable Meme & Reel Ideas",
   description: "A community platform where users share short, relatable, meme/reel-worthy thoughts. No chats, no drama.",
   keywords: ["thinksy", "thoughts", "memes", "reels", "relatable", "quotes", "social platform"],
+  verification: {
+    google: "ZeyFhGlDg_UN_jD-rxCQZyWs_52qgewqqIFRfGz7dJs",
+  },
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
@@ -31,6 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="google-site-verification" content="ZeyFhGlDg_UN_jD-rxCQZyWs_52qgewqqIFRfGz7dJs" />
+      </head>
       <body className="min-h-screen antialiased selection:bg-pink-500 selection:text-white">
         <ThemeProvider>
           <AuthProvider>
