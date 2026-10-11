@@ -6,6 +6,14 @@ import { AuthProvider } from "@/lib/auth";
 import { LoginModal } from "@/components/LoginModal";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "https://thinksy-web.vercel.app")
+  ),
   title: "Thinksy — Relatable Meme & Reel Ideas",
   description: "A community platform where users share short, relatable, meme/reel-worthy thoughts. No chats, no drama.",
   keywords: ["thinksy", "thoughts", "memes", "reels", "relatable", "quotes", "social platform"],
