@@ -22,9 +22,6 @@ export const metadata: Metadata = {
     "mindful notes",
     "digital space",
   ],
-  alternates: {
-    canonical: PRODUCTION_SITE_URL,
-  },
   robots: {
     index: true,
     follow: true,
@@ -116,6 +113,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="canonical" href="https://thinksy-web.vercel.app/" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/logo.png" type="image/png" sizes="512x512" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         <meta name="google-site-verification" content="ZeyFhGlDg_UN_jD-rxCQZyWs_52qgewqqIFRfGz7dJs" />
         <script
           type="application/ld+json"
