@@ -154,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="w-10 h-10 rounded-full p-0.5 ring-2 ring-amber-400/50 bg-black overflow-hidden shrink-0 shadow-lg shadow-amber-500/20">
                   <img
                     src="/logo.png"
-                    alt="Thinksy Logo"
+                    alt="THINKSY Logo"
                     className="w-full h-full object-cover rounded-full"
                   />
                 </div>

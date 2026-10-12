@@ -417,7 +417,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }`}
                 >
                   <div className="w-14 h-14 rounded-full p-0.5 ring-2 ring-amber-400/50 overflow-hidden bg-black shrink-0 shadow-md">
-                    <img src="/logo.png" alt="Thinksy Logo" className="w-full h-full object-cover rounded-full" />
+                    <img src="/logo.png" alt="THINKSY Logo" className="w-full h-full object-cover rounded-full" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

@@ -599,7 +599,7 @@ export const AuthScreen: React.FC = () => {
           <div className="w-10 h-10 rounded-full p-0.5 shadow-lg shadow-amber-500/25 overflow-hidden ring-1.5 ring-amber-400/50 bg-black shrink-0">
             <img
               src="/logo.png"
-              alt="Thinksy Logo"
+              alt="THINKSY Logo"
               className="w-full h-full object-cover rounded-full"
             />
           </div>
@@ -642,9 +642,9 @@ export const AuthScreen: React.FC = () => {
                 <span>The Community for Viral Creator Thoughts</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15]">
-                Thoughts everyone relates to,{" "}
+                THINKSY –{" "}
                 <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
-                  turned into viral reels.
+                  A Space Where Your Thoughts Can Breathe
                 </span>
               </h1>
             </div>

@@ -100,14 +100,14 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="relative rounded-full p-0.5 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform duration-200 overflow-hidden ring-1.5 ring-amber-400/50 bg-black shrink-0 w-8 h-8 sm:w-8.5 sm:h-8.5">
                 <img
                   src="/logo.png"
-                  alt="Thinksy Logo"
+                  alt="THINKSY Logo"
                   className="w-full h-full object-cover rounded-full"
                 />
               </div>
               <div className="flex items-center gap-1.5">
-                <h1 className="font-black tracking-tight text-sm sm:text-base uppercase transition-colors bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
+                <span className="font-black tracking-tight text-sm sm:text-base uppercase transition-colors bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
                   THINKSY
-                </h1>
+                </span>
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
               </div>
             </div>
@@ -126,13 +126,13 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative rounded-full p-0.5 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform duration-200 overflow-hidden ring-1.5 ring-amber-400/50 bg-black shrink-0 w-7 h-7">
             <img
               src="/logo.png"
-              alt="Thinksy Logo"
+              alt="THINKSY Logo"
               className="w-full h-full object-cover rounded-full"
             />
           </div>
-          <h1 className="font-black tracking-tight text-xs uppercase bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
+          <span className="font-black tracking-tight text-xs uppercase bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent">
             THINKSY
-          </h1>
+          </span>
         </div>
 
         {/* Right: Active Filter Badges & Quick Search */}
